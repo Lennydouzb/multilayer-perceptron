@@ -48,6 +48,10 @@ def main():
         df[1] = df[1].replace('M', 1)
         df[1] = df[1].replace('B', 0)
         guess = df[1]
+
+        guess_matrices = []
+        for i in range(len(guess)):
+            guess_matrices.append(MatrixFloat(2, 1, e_types.NO_TYPE, [0.0,1.0], -1, -1) if guess.iloc[i] == 1 else MatrixFloat(2, 1, e_types.NO_TYPE, [1.0,0.0], -1, -1))
         dataset = df.drop(columns = [1])
         dataset = (dataset - dataset.min()) / (dataset.max() - dataset.min()) 
         #80% of the dataset for learning
@@ -56,8 +60,8 @@ def main():
         # 100 - 80 (20) for exam
         exam_df = dataset.iloc[split:]
         input_size = len(dataset.columns)
-        #we add the output layer (1 neuron)
-        architecture = layers + [1]
+        #we add the output layer (2 neurons)
+        architecture = layers + [2]
         #litteraly makes a Matrix for every line of the dataset
         input_matrix_list = [MatrixFloat(input_size, 1, e_types.NO_TYPE, [value for column, value, in learn_df.iloc[i].items()], -1, -1) for i in range(len(learn_df))]
         input_matrix_list_exam = [MatrixFloat(input_size, 1, e_types.NO_TYPE, [value for column, value, in exam_df.iloc[i].items()], -1, -1) for i in range(len(exam_df))]
@@ -77,13 +81,14 @@ def main():
         error_plot_exam = []
         for epoch in range(epochs):
             epochs_plot.append(epoch)
-            error_sum = 0
+            error_sum = 0.0
             #
             #   Learning Phase !!!!
             #
             for i in range(len(input_matrix_list)):
                 X = input_matrix_list[i]
                 Y = guess.iloc[i]
+                Y_matrix = guess_matrices[i]
                 #memory matrices
                 A_matrices = [X]
                 Z_matrices = []
@@ -93,15 +98,23 @@ def main():
                     Z_matrices.append(Z)
                     data = Z.getData()
                     if j == len(architecture) - 1:
-                        prediction = 1 / (1 + math.exp(-data[0]))
-                        error_sum += abs(prediction - Y)
-                        tmp = MatrixFloat(1, 1, e_types.NO_TYPE, [prediction], -1, -1)
+                        max_z = max(data)
+                        exp_values = []
+                        for z_i in data:
+                            exp_values.append(math.exp(z_i - max_z))
+                        prediction = [value / sum(exp_values) for value in exp_values]
+
+                        ## littealy - yn log pn + (1 - yn) log( 1 - pn))), while summing with +=, and will be /N at the end while plotting
+                        pn = max(min(prediction[1], 1.0 - 1e-15), 1e-15)
+                        loss = -(Y * math.log(pn) + (1.0 - Y) * math.log(1.0 - pn))
+                        error_sum += loss
+                        tmp = MatrixFloat(2, 1, e_types.NO_TYPE, prediction, -1, -1)
                     else:
                         relu_data = relu(data)
                         tmp = MatrixFloat(len(relu_data), 1, e_types.NO_TYPE, relu_data, -1, -1)
                     A_matrices.append(tmp)
 
-                error = A_matrices[-1].sub_scalar(Y)
+                error = A_matrices[-1].sub_mat(Y_matrix)
                 for j in range(len(architecture) - 1, -1, -1):
                     transposed_A = A_matrices[j].transpose()
                     gradient = error.multiply_mat(transposed_A)
@@ -123,15 +136,23 @@ def main():
             error_sum_exam = 0
             for i in range(len(input_matrix_list_exam)):
                 A_matrices_exam = [input_matrix_list_exam[i]]
-                Y = guess.iloc[split + i] 
+                Y = guess.iloc[split + i]
                 for j in range(len(architecture)):
                     Z = layers_weight_matrices[j].multiply_mat(A_matrices_exam[-1])
                     Z = Z.add_mat(layers_bias_matrices[j])
                     data = Z.getData()
                     if j == len(architecture) - 1:
-                        prediction = 1 / (1 + math.exp(-data[0]))
-                        error_sum_exam += abs(prediction - Y)
-                        tmp = MatrixFloat(1, 1, e_types.NO_TYPE, [prediction], -1, -1)
+                        max_z = max(data)
+                        exp_values = []
+                        for z_i in data:
+                            exp_values.append(math.exp(z_i - max_z))
+                        prediction = [value / sum(exp_values) for value in exp_values]
+
+                        ## littealy - yn log pn + (1 - yn) log( 1 - pn))), while summing with +=, and will be /N at the end while plotting
+                        pn = max(min(prediction[1], 1.0 - 1e-15), 1e-15)
+                        loss = -(Y * math.log(pn) + (1.0 - Y) * math.log(1.0 - pn))
+                        error_sum_exam += loss
+                        tmp = MatrixFloat(2, 1, e_types.NO_TYPE, prediction, -1, -1)
                     else:
                         relu_data = relu(data)
                         tmp = MatrixFloat(len(relu_data), 1, e_types.NO_TYPE, relu_data, -1, -1)
